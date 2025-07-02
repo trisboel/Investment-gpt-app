@@ -1,43 +1,64 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 import yfinance as yf
 
-st.set_page_config(page_title="Investment Assistant", layout="centered")
-st.title("💼 Investment Assistant")
+st.set_page_config(page_title="Investment GPT mit Echtzeit-Daten", page_icon="💹")
 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-user_input = st.text_input("📩 Deine Frage (z. B. '500 € in Apple – was tun?'):")
+st.title("Investment GPT mit Echtzeit-Finanzdaten 🚀")
+st.write("Frag mich, wie du am besten in Aktien oder ETFs investieren kannst.")
+
+user_input = st.text_input("Gib deine Frage ein:", "")
+
+def fetch_stock_data(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="5d")
+        last_close = hist['Close'][-1]
+        prev_close = hist['Close'][-2]
+        change = (last_close - prev_close) / prev_close * 100
+        return {
+            "ticker": ticker,
+            "last_close": last_close,
+            "change_percent": change
+        }
+    except Exception as e:
+        return None
 
 def analyze_input(user_input):
-    tickers = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "META"]
-    analysis = []
+    # Beispiel: Wir suchen ein Ticker-Symbol in der Frage (sehr einfach)
+    # Für eine richtige App sollte das besser gemacht werden
+    tickers = ["AAPL", "MSFT", "TSLA", "GOOG", "AMZN"]  # Beispiel
+    found_ticker = None
+    for t in tickers:
+        if t.lower() in user_input.lower():
+            found_ticker = t
+            break
 
-    for ticker in tickers:
-        if ticker.lower() in user_input.lower() or ticker.replace(".", "").lower() in user_input.lower():
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="5d")
-            price = hist["Close"].iloc[-1]
-            analysis.append(f"Aktienkurs {ticker}: {price:.2f} USD")
+    stock_info_text = ""
+    if found_ticker:
+        data = fetch_stock_data(found_ticker)
+        if data:
+            stock_info_text = f"Die aktuelle Schlusskurs von {data['ticker']} ist {data['last_close']:.2f} USD, mit einer Tagesänderung von {data['change_percent']:.2f}%. "
+        else:
+            stock_info_text = f"Leider konnte ich keine aktuellen Daten für {found_ticker} abrufen. "
 
-    prompt = f"""Du bist ein Investment-Analyst. Gib eine kurze, einfache Handlungsempfehlung (Kaufen, Halten, Verkaufen) basierend auf dem folgenden Nutzereingabe und aktuellen Kursen:
+    prompt = stock_info_text + "Basierend darauf, " + user_input
 
-Nutzerfrage: {user_input}
-Kurse: {', '.join(analysis)}
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.7,
+        )
+        result = response.choices[0].message.content
+        return result
+    except Exception as e:
+        return f"Fehler bei der Anfrage an OpenAI: {e}"
 
-Antworte nur mit der Empfehlung und einer kurzen Begründung in maximal 3 Sätzen.
-"""
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-        max_tokens=200
-    )
-
-    return response.choices[0].message["content"]
-
-if st.button("🚀 Analysieren") and user_input:
-    with st.spinner("Analysiere…"):
-        result = analyze_input(user_input)
-        st.success(result)
+if user_input:
+    with st.spinner("Analysiere deine Anfrage..."):
+        answer = analyze_input(user_input)
+    st.markdown(f"**Antwort:** {answer}")

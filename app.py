@@ -48,7 +48,7 @@ def analyze_input(user_input):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0.7,
